@@ -233,3 +233,58 @@ end))
 
 table.insert(connections, RunService.RenderStepped:Connect(function()
     if Settings.ESPEnabled then updateESP() else
+        for player,_ in pairs(ESPs) do removeESP(player) end
+    end
+    if Settings.AimlockEnabled then runAimlock() end
+    Camera.FieldOfView = Settings.PlayerFOV
+end))
+
+table.insert(connections, LocalPlayer.CharacterAdded:Connect(function()
+    wait(0.5)
+    if Settings.ESPEnabled then updateESP() end
+end))
+
+UserInputService.InputBegan:Connect(function(input,gpe)
+    if gpe then return end
+    if input.UserInputType==Enum.UserInputType.MouseButton2 then Settings.AimlockActive=true end
+end)
+UserInputService.InputEnded:Connect(function(input,gpe)
+    if gpe then return end
+    if input.UserInputType==Enum.UserInputType.MouseButton2 then Settings.AimlockActive=false end
+end)
+
+-- =========================
+-- ======= UI ELEMENTS ======
+-- =========================
+
+-- Combat Tab
+CombatTab:CreateToggle({Name="Aimlock", CurrentValue=false, Flag="Aimlock", Callback=function(v) Settings.AimlockEnabled=v end})
+CombatTab:CreateSlider({Name="Aimlock FOV", Range={50,500}, Increment=5, Suffix="px", CurrentValue=150, Flag="AimlockFOV", Callback=function(v) Settings.AimlockFOV=v end})
+CombatTab:CreateSlider({Name="Aimlock Prediction", Range={0,0.5}, Increment=0.01, Suffix="", CurrentValue=0.18, Flag="AimlockPrediction", Callback=function(v) Settings.AimlockPrediction=v end})
+CombatTab:CreateToggle({Name="Wallbang", CurrentValue=false, Flag="Wallbang", Callback=function(v) Settings.WallbangEnabled=v end})
+CombatTab:CreateToggle({Name="Melee Aura", CurrentValue=false, Flag="MeleeAura", Callback=function(v) Settings.MeleeAuraEnabled=v end})
+CombatTab:CreateSlider({Name="Melee Reach", Range={1,30}, Increment=1, Suffix=" studs", CurrentValue=10, Flag="MeleeReach", Callback=function(v) Settings.MeleeReach=v end})
+
+-- Misc Tab
+MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) setNoClip(v) end})
+MiscTab:CreateToggle({Name="Infinite Sprint", CurrentValue=false, Flag="InfiniteSprint", Callback=function(v) toggleInfiniteSprint(v) end})
+MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v end})
+
+-- Extras Tab
+ExtrasTab:CreateButton({Name="Copy Discord", Callback=function()
+    setclipboard("https://discord.gg/dJEM47ZtGa")
+end})
+ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
+    for _,conn in pairs(connections) do conn:Disconnect() end
+    for player,_ in pairs(ESPs) do removeESP(player) end
+    if LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = true end
+        end
+    end
+    Camera.FieldOfView = 70
+    if Window then Window:Unload() end
+    print("Loader fully unloaded!")
+end})
+
+print("UniScript BETA ready: 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, Wallbang, Player FOV, Melee Aura, Visual FOV Circle, Unload functional.")
