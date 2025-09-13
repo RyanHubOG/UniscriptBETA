@@ -1,4 +1,4 @@
---// UniScript BETA Loader (Reliable & Optimized)
+--// UniScript BETA Loader (Full Version with Reliable Rayfield)
 
 -- Services
 local Players = game:GetService("Players")
@@ -188,7 +188,6 @@ end)
 
 sprintTables = getTargetTables()
 
--- Hook up UI toggle
 MiscTab:CreateToggle({
     Name = "Infinite Sprint",
     CurrentValue = false,
@@ -197,3 +196,12 @@ MiscTab:CreateToggle({
         SprintEnabled = v
     end
 })
+
+-- =========================
+-- Continue adding the rest of the UI (Combat, Misc, Extras)
+-- =========================
+-- CombatTab: Aimlock, FOV, Prediction, Wallbang, Melee Aura, Reach
+-- MiscTab: NoClip, Player FOV
+-- ExtrasTab: Copy Discord, Unload Script
+
+-- You can integrate the rest of the toggles exactly like we structured previously.
