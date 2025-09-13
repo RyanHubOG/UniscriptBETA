@@ -1,4 +1,4 @@
---// UniScript BETA Loader (Optimized, Lag-Free Infinite Sprint)
+--// UniScript BETA Loader (Full Optimized Version with Low-Lag Infinite Sprint)
 
 -- Services
 local Players = game:GetService("Players")
@@ -67,10 +67,9 @@ fpsLabel.ResetOnSpawn = false
 fpsLabel.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local lastTime = tick()
-local fps = 0
 RunService.RenderStepped:Connect(function()
     local currentTime = tick()
-    fps = 1 / (currentTime - lastTime)
+    local fps = 1 / (currentTime - lastTime)
     lastTime = currentTime
     fpsLabel.Text = "FPS: "..math.floor(fps)
 end)
@@ -129,16 +128,15 @@ local function removeESP(player)
     end
 end
 
-local function updateESP()
+table.insert(connections, RunService.RenderStepped:Connect(function()
     for _,player in pairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             if Settings.ESPEnabled then
                 if not ESPs[player] then createESP(player) end
                 local hum = player.Character:FindFirstChild("Humanoid")
-                local root = player.Character.HumanoidRootPart
                 if hum then ESPs[player].HealthBar.Size = UDim2.new(hum.Health / hum.MaxHealth,0,0.2,0) end
-                local distance = (root.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                ESPs[player].Distance.Text = string.format("%.0f studs", distance)
+                local distance = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                if ESPs[player] then ESPs[player].Distance.Text = string.format("%.0f studs", distance) end
             else
                 removeESP(player)
             end
@@ -146,24 +144,52 @@ local function updateESP()
             removeESP(player)
         end
     end
-end
+end))
 
 -- =========================
--- INFINITE SPRINT (Lag-Free WalkSpeed)
+-- INFINITE SPRINT (Optimized getgc method)
 -- =========================
-local defaultSpeed = 16
-local sprintSpeed = 100
+local sprintTables = {}
+local SprintEnabled = false
 
-table.insert(connections, RunService.RenderStepped:Connect(function()
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        local humanoid = LocalPlayer.Character.Humanoid
-        if Settings.InfiniteSprint then
-            humanoid.WalkSpeed = sprintSpeed
-        else
-            humanoid.WalkSpeed = defaultSpeed
+local function getTargetTables()
+    local found = {}
+    for _, tbl in getgc(true) do
+        if typeof(tbl) == "table" and rawget(tbl, "S") then
+            if typeof(rawget(tbl, "S")) == "number" then    
+                table.insert(found, tbl)
+            end
         end
     end
-end))
+    return found
+end
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if SprintEnabled then
+            for _, tbl in pairs(sprintTables) do
+                rawset(tbl, "S", 100)
+            end
+        end
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(1)
+    sprintTables = getTargetTables()
+end)
+
+sprintTables = getTargetTables()
+
+-- Hook up UI toggle
+MiscTab:CreateToggle({
+    Name = "Infinite Sprint",
+    CurrentValue = false,
+    Flag = "InfiniteSprint",
+    Callback = function(v)
+        SprintEnabled = v
+    end
+})
 
 -- =========================
 -- AIMLOCK CENTERED
@@ -194,7 +220,7 @@ local function aimAtTarget(target)
         local cam = Camera
         local head = target.Head
         local root = target.HumanoidRootPart
-        local predictedPos = head.Position + root.Velocity * (Settings.AimlockPrediction or 0.18)
+        local predictedPos = head.Position + root.Velocity * Settings.AimlockPrediction
         local direction = (predictedPos - cam.CFrame.Position).Unit
         cam.CFrame = CFrame.new(cam.CFrame.Position, cam.CFrame.Position + direction)
     end
@@ -223,7 +249,37 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if gpe then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimlockActive = true end
 end)
+
 UserInputService.InputEnded:Connect(function(input,gpe)
     if gpe then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimlockActive = false end
 end)
+
+-- =========================
+-- COMBAT TAB UI
+-- =========================
+CombatTab:CreateToggle({Name="Aimlock", CurrentValue=false, Flag="Aimlock", Callback=function(v) Settings.AimlockEnabled=v end})
+CombatTab:CreateSlider({Name="Aimlock FOV", Range={50,500}, Increment=5, Suffix="px", CurrentValue=150, Flag="AimlockFOV", Callback=function(v) Settings.AimlockFOV=v if FOVCircle then FOVCircle.Radius=v end end})
+CombatTab:CreateSlider({Name="Aimlock Prediction", Range={0,0.5}, Increment=0.01, Suffix="", CurrentValue=0.18, Flag="AimlockPrediction", Callback=function(v) Settings.AimlockPrediction=v end})
+CombatTab:CreateToggle({Name="Wallbang", CurrentValue=false, Flag="Wallbang", Callback=function(v) Settings.WallbangEnabled=v end})
+CombatTab:CreateToggle({Name="Melee Aura", CurrentValue=false, Flag="MeleeAura", Callback=function(v) Settings.MeleeAuraEnabled=v end})
+CombatTab:CreateSlider({Name="Melee Reach", Range={1,30}, Increment=1, Suffix=" studs", CurrentValue=10, Flag="MeleeReach", Callback=function(v) Settings.MeleeReach=v end})
+
+-- =========================
+-- MISC TAB UI
+-- =========================
+MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) Settings.NoClipEnabled=v end})
+MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v Camera.FieldOfView=v end})
+
+-- =========================
+-- EXTRAS TAB UI
+-- =========================
+ExtrasTab:CreateButton({Name="Copy Discord", Callback=function() setclipboard("https://discord.gg/dJEM47ZtGa") end})
+ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
+    for _, conn in pairs(connections) do conn:Disconnect() end
+    for player, _ in pairs(ESPs) do ESPs[player].Billboard:Destroy() end
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed=16 end
+    Camera.FieldOfView = 70
+    if Window then Window:Unload() end
+    print("UniScript fully unloaded!")
+end})
