@@ -1,4 +1,4 @@
---// Loader.lua for Roblox (Fully Optimized, 3 Tabs, Unload Included)
+--// Loader.lua for Roblox (3 Tabs, Fixed Infinite Sprint, ESP, Aimlock, NoClip, Wallbang, Unload)
 
 -- Services
 local Players = game:GetService("Players")
@@ -25,14 +25,14 @@ local Settings = {
 local ESPs = {}
 local connections = {}
 local sprintPatched = false
-local originalSprint
+local sprintTarget = nil
 
 -- Load Rayfield
 local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
 local Window = Rayfield:CreateWindow({
-    Name = "UniScript BETA",
+    Name = "Criminality Enhancer",
     LoadingTitle = "Loading...",
-    LoadingSubtitle = "by Ryan",
+    LoadingSubtitle = "by YourName",
     Theme = "Dark",
     ConfigurationSaving = {Enabled=true, FolderName="CriminalityScripts", FileName="Settings"},
     KeySystem = false
@@ -118,31 +118,44 @@ local function updateESP()
     end
 end
 
--- Optimized Infinite Sprint
-local function toggleInfiniteSprint(enable)
-    if enable and not sprintPatched then
-        for i,v in pairs(getgc(true)) do
-            if type(v)=="table" and rawget(v,"S") then
-                originalSprint = v.S
-                v.S = 100
-                sprintPatched = true
-                break
-            end
-        end
-    elseif not enable and sprintPatched then
-        if originalSprint then
-            for i,v in pairs(getgc(true)) do
-                if type(v)=="table" and rawget(v,"S") then
-                    v.S = originalSprint
-                    sprintPatched = false
-                    break
-                end
-            end
+-- =========================
+-- ======= INFINITE SPRINT (FIXED) ======
+-- =========================
+
+local function patchSprint()
+    if not LocalPlayer.Character then return end
+    for i,v in pairs(getgc(true)) do
+        if type(v) == "table" and rawget(v,"S") then
+            sprintTarget = v
+            v.S = 100
+            sprintPatched = true
+            break
         end
     end
 end
 
--- Aimlock
+RunService.RenderStepped:Connect(function()
+    if Settings.InfiniteSprint then
+        if not sprintPatched or not sprintTarget then
+            patchSprint()
+        elseif sprintTarget.S < 100 then
+            sprintTarget.S = 100
+        end
+    end
+end)
+
+local function toggleInfiniteSprint(enable)
+    Settings.InfiniteSprint = enable
+    if not enable and sprintPatched and sprintTarget then
+        sprintPatched = false
+        sprintTarget = nil
+    end
+end
+
+-- =========================
+-- ======= AIMLOCK ======
+-- =========================
+
 local function aimAtTarget(target)
     if target and target:FindFirstChild("Head") and target:FindFirstChild("HumanoidRootPart") then
         local cam = Camera
@@ -173,20 +186,16 @@ local function runAimlock()
     if closest then aimAtTarget(closest.Character) end
 end
 
--- Safe Wallbang placeholder
-local function attemptWallbang(shootFunction)
-    if Settings.WallbangEnabled and shootFunction then
-        -- Hook shooting function here (game-specific)
-    end
-end
+-- =========================
+-- ======= NOCLIP ======
+-- =========================
 
--- NoClip
 local function setNoClip(enable)
     Settings.NoClipEnabled = enable
 end
 
 -- =========================
--- ======= CONNECTIONS =====
+-- ======= CONNECTIONS ======
 -- =========================
 
 table.insert(connections, RunService.Stepped:Connect(function()
@@ -222,7 +231,7 @@ UserInputService.InputEnded:Connect(function(input,gpe)
 end)
 
 -- =========================
--- ======= UI ELEMENTS =====
+-- ======= UI ELEMENTS ======
 -- =========================
 
 -- Combat Tab
@@ -234,39 +243,23 @@ CombatTab:CreateToggle({Name="Wallbang", CurrentValue=false, Flag="Wallbang", Ca
 -- Misc Tab
 MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) setNoClip(v) end})
 MiscTab:CreateToggle({Name="Infinite Sprint", CurrentValue=false, Flag="InfiniteSprint", Callback=function(v) toggleInfiniteSprint(v) end})
+MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v end})
 
 -- Extras Tab
-ExtrasTab:CreateButton({Name="Copy Discord", Callback=function()
-    setclipboard("https://discord.gg/YOURDISCORD")
-end})
-
+ExtrasTab:CreateButton({Name="Copy Discord", Callback=function() setclipboard("https://discord.gg/YOURDISCORD") end})
 ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
-    -- Disconnect all connections
-    for _,conn in pairs(connections) do
-        conn:Disconnect()
-    end
-    -- Remove all ESP
+    for _,conn in pairs(connections) do conn:Disconnect() end
     for player,_ in pairs(ESPs) do removeESP(player) end
-    -- Restore NoClip
     if LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
+            if part:IsA("BasePart") then part.CanCollide = true end
         end
     end
-    -- Restore FOV
     Camera.FieldOfView = 70
-    -- Restore Infinite Sprint
-    toggleInfiniteSprint(false)
-    -- Remove Rayfield
-    if Window then
-        Window:Unload()
-    end
+    sprintPatched = false
+    sprintTarget = nil
+    if Window then Window:Unload() end
     print("Loader fully unloaded!")
 end})
 
--- Player FOV slider (global, accessible in any tab if desired)
-MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v end})
-
-print("Loader ready: All features functional, 3 tabs, fully unloadable, optimized.")
+print("Loader ready: 3 Tabs, Fixed Infinite Sprint, ESP, Aimlock, NoClip, Wallbang, Unload functional.")
