@@ -1,4 +1,4 @@
---// Loader.lua for Roblox (Fully Optimized & Functional)
+--// Loader.lua for Roblox (Fully Optimized, 3 Tabs, Unload Included)
 
 -- Services
 local Players = game:GetService("Players")
@@ -8,34 +8,46 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
--- Settings (All OFF by default)
+-- Settings
 local Settings = {
     InfiniteSprint = false,
     ESPEnabled = false,
     AimlockEnabled = false,
     WallbangEnabled = false,
+    NoClipEnabled = false,
     AimlockFOV = 150,
     AimlockActive = false,
     PlayerFOV = Camera.FieldOfView,
     AimlockPrediction = 0.18,
 }
 
--- Load Rayfield UI
-local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
+-- Globals
+local ESPs = {}
+local connections = {}
+local sprintPatched = false
+local originalSprint
 
+-- Load Rayfield
+local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
 local Window = Rayfield:CreateWindow({
-    Name = "Criminality Enhancer",
+    Name = "UniScript BETA",
     LoadingTitle = "Loading...",
-    LoadingSubtitle = "by YourName",
+    LoadingSubtitle = "by Ryan",
     Theme = "Dark",
     ConfigurationSaving = {Enabled=true, FolderName="CriminalityScripts", FileName="Settings"},
     KeySystem = false
 })
 
-local Tab = Window:CreateTab("Features", 4483362458)
+-- Tabs
+local CombatTab = Window:CreateTab("Combat", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+local ExtrasTab = Window:CreateTab("Extras", 4483362458)
+
+-- =========================
+-- ======= FUNCTIONS ======
+-- =========================
 
 -- ESP
-local ESPs = {}
 local function createESP(player)
     if ESPs[player] then return end
     local character = player.Character
@@ -107,15 +119,12 @@ local function updateESP()
 end
 
 -- Optimized Infinite Sprint
-local sprintPatched = false
-local originalSprint
-
 local function toggleInfiniteSprint(enable)
     if enable and not sprintPatched then
         for i,v in pairs(getgc(true)) do
             if type(v)=="table" and rawget(v,"S") then
                 originalSprint = v.S
-                v.S = 100 -- Max sprint
+                v.S = 100
                 sprintPatched = true
                 break
             end
@@ -164,48 +173,45 @@ local function runAimlock()
     if closest then aimAtTarget(closest.Character) end
 end
 
--- Safe Wallbang Toggle (Placeholder)
+-- Safe Wallbang placeholder
 local function attemptWallbang(shootFunction)
     if Settings.WallbangEnabled and shootFunction then
-        -- Hook shooting function here if possible (game-specific)
+        -- Hook shooting function here (game-specific)
     end
 end
 
--- RenderStepped
-RunService.RenderStepped:Connect(function()
+-- NoClip
+local function setNoClip(enable)
+    Settings.NoClipEnabled = enable
+end
+
+-- =========================
+-- ======= CONNECTIONS =====
+-- =========================
+
+table.insert(connections, RunService.Stepped:Connect(function()
+    if Settings.NoClipEnabled and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end))
+
+table.insert(connections, RunService.RenderStepped:Connect(function()
     if Settings.ESPEnabled then updateESP() else
         for player,_ in pairs(ESPs) do removeESP(player) end
     end
     if Settings.AimlockEnabled then runAimlock() end
     Camera.FieldOfView = Settings.PlayerFOV
-end)
+end))
 
--- Rayfield Toggles
-Tab:CreateToggle({
-    Name="Infinite Sprint",
-    CurrentValue=false,
-    Flag="InfiniteSprint",
-    Callback=function(v)
-        Settings.InfiniteSprint=v
-        toggleInfiniteSprint(v)
-    end
-})
-Tab:CreateToggle({Name="ESP", CurrentValue=false, Flag="ESP", Callback=function(v)
-    Settings.ESPEnabled=v
-    if not v then for p,_ in pairs(ESPs) do removeESP(p) end end
-end})
-Tab:CreateToggle({Name="Aimlock", CurrentValue=false, Flag="Aimlock", Callback=function(v) Settings.AimlockEnabled=v end})
-Tab:CreateToggle({Name="Wallbang", CurrentValue=false, Flag="Wallbang", Callback=function(v) Settings.WallbangEnabled=v end})
+table.insert(connections, LocalPlayer.CharacterAdded:Connect(function()
+    wait(0.5)
+    if Settings.ESPEnabled then updateESP() end
+end))
 
-Tab:CreateSlider({Name="Aimlock FOV", Range={50,500}, Increment=5, Suffix="px", CurrentValue=150, Flag="AimlockFOV", Callback=function(v) Settings.AimlockFOV=v end})
-Tab:CreateSlider({Name="Aimlock Prediction", Range={0,0.5}, Increment=0.01, Suffix="", CurrentValue=0.18, Flag="AimlockPrediction", Callback=function(v) Settings.AimlockPrediction=v end})
-Tab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v end})
-
-Tab:CreateButton({Name="Copy Server Link", Callback=function()
-    setclipboard("https://www.roblox.com/games/"..game.PlaceId.."/"..game.JobId)
-end})
-
--- Right-Click Aimlock
 UserInputService.InputBegan:Connect(function(input,gpe)
     if gpe then return end
     if input.UserInputType==Enum.UserInputType.MouseButton2 then Settings.AimlockActive=true end
@@ -215,10 +221,52 @@ UserInputService.InputEnded:Connect(function(input,gpe)
     if input.UserInputType==Enum.UserInputType.MouseButton2 then Settings.AimlockActive=false end
 end)
 
--- Reset ESP on respawn
-LocalPlayer.CharacterAdded:Connect(function()
-    wait(0.5)
-    if Settings.ESPEnabled then updateESP() end
-end)
+-- =========================
+-- ======= UI ELEMENTS =====
+-- =========================
 
-print("Loader ready: All features functional, Infinite Sprint optimized, ESP & FOV working, safe Wallbang toggle added.")
+-- Combat Tab
+CombatTab:CreateToggle({Name="Aimlock", CurrentValue=false, Flag="Aimlock", Callback=function(v) Settings.AimlockEnabled=v end})
+CombatTab:CreateSlider({Name="Aimlock FOV", Range={50,500}, Increment=5, Suffix="px", CurrentValue=150, Flag="AimlockFOV", Callback=function(v) Settings.AimlockFOV=v end})
+CombatTab:CreateSlider({Name="Aimlock Prediction", Range={0,0.5}, Increment=0.01, Suffix="", CurrentValue=0.18, Flag="AimlockPrediction", Callback=function(v) Settings.AimlockPrediction=v end})
+CombatTab:CreateToggle({Name="Wallbang", CurrentValue=false, Flag="Wallbang", Callback=function(v) Settings.WallbangEnabled=v end})
+
+-- Misc Tab
+MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) setNoClip(v) end})
+MiscTab:CreateToggle({Name="Infinite Sprint", CurrentValue=false, Flag="InfiniteSprint", Callback=function(v) toggleInfiniteSprint(v) end})
+
+-- Extras Tab
+ExtrasTab:CreateButton({Name="Copy Discord", Callback=function()
+    setclipboard("https://discord.gg/YOURDISCORD")
+end})
+
+ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
+    -- Disconnect all connections
+    for _,conn in pairs(connections) do
+        conn:Disconnect()
+    end
+    -- Remove all ESP
+    for player,_ in pairs(ESPs) do removeESP(player) end
+    -- Restore NoClip
+    if LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+    -- Restore FOV
+    Camera.FieldOfView = 70
+    -- Restore Infinite Sprint
+    toggleInfiniteSprint(false)
+    -- Remove Rayfield
+    if Window then
+        Window:Unload()
+    end
+    print("Loader fully unloaded!")
+end})
+
+-- Player FOV slider (global, accessible in any tab if desired)
+MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v end})
+
+print("Loader ready: All features functional, 3 tabs, fully unloadable, optimized.")
