@@ -1,4 +1,4 @@
---// Loader.lua for Roblox (3 Tabs, Fixed Infinite Sprint, ESP, Aimlock, NoClip, Wallbang, Unload)
+--// Loader.lua for Roblox (3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, NoClip, Wallbang, Unload)
 
 -- Services
 local Players = game:GetService("Players")
@@ -24,8 +24,6 @@ local Settings = {
 -- Globals
 local ESPs = {}
 local connections = {}
-local sprintPatched = false
-local sprintTarget = nil
 
 -- Load Rayfield
 local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
@@ -119,38 +117,23 @@ local function updateESP()
 end
 
 -- =========================
--- ======= INFINITE SPRINT (FIXED) ======
+-- ======= INFINITE SPRINT (Laggy but reliable) ======
 -- =========================
-
-local function patchSprint()
-    if not LocalPlayer.Character then return end
-    for i,v in pairs(getgc(true)) do
-        if type(v) == "table" and rawget(v,"S") then
-            sprintTarget = v
-            v.S = 100
-            sprintPatched = true
-            break
-        end
-    end
-end
-
-RunService.RenderStepped:Connect(function()
-    if Settings.InfiniteSprint then
-        if not sprintPatched or not sprintTarget then
-            patchSprint()
-        elseif sprintTarget.S < 100 then
-            sprintTarget.S = 100
-        end
-    end
-end)
 
 local function toggleInfiniteSprint(enable)
     Settings.InfiniteSprint = enable
-    if not enable and sprintPatched and sprintTarget then
-        sprintPatched = false
-        sprintTarget = nil
-    end
 end
+
+-- Apply sprint every frame (laggy but reliable)
+table.insert(connections, RunService.RenderStepped:Connect(function()
+    if Settings.InfiniteSprint then
+        for i,v in pairs(getgc(true)) do
+            if type(v)=="table" and rawget(v,"S") then
+                v.S = 100
+            end
+        end
+    end
+end))
 
 -- =========================
 -- ======= AIMLOCK ======
@@ -256,10 +239,8 @@ ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
         end
     end
     Camera.FieldOfView = 70
-    sprintPatched = false
-    sprintTarget = nil
     if Window then Window:Unload() end
     print("Loader fully unloaded!")
 end})
 
-print("Loader ready: 3 Tabs, Fixed Infinite Sprint, ESP, Aimlock, NoClip, Wallbang, Unload functional.")
+print("Loader ready: 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, NoClip, Wallbang, Unload functional.")
