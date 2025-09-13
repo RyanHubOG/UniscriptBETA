@@ -1,4 +1,4 @@
---// Loader.lua for Roblox (UniScript BETA, 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, Wallbang, NoClip, Reach Punch, Safe Visual FOV, Unload)
+--// UniScript BETA Loader.lua
 
 -- Services
 local Players = game:GetService("Players")
@@ -6,7 +6,6 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
 
 -- Settings
 local Settings = {
@@ -27,12 +26,22 @@ local Settings = {
 local ESPs = {}
 local connections = {}
 
--- Load Rayfield
-local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
+-- =========================
+-- ======= SAFE RAYFIELD LOADING ======
+-- =========================
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
+end)
+
+if not success or not Rayfield then
+    warn("Rayfield failed to load. UI will not appear.")
+    return
+end
+
 local Window = Rayfield:CreateWindow({
-    Name = "UniScript BETA",             
-    LoadingTitle = "UniScript is loading...",  
-    LoadingSubtitle = "by Ryan",         
+    Name = "UniScript BETA",
+    LoadingTitle = "UniScript is loading...",
+    LoadingSubtitle = "by Ryan",
     Theme = "Dark",
     ConfigurationSaving = {Enabled=true, FolderName="CriminalityScripts", FileName="Settings"},
     KeySystem = false
@@ -44,10 +53,30 @@ local MiscTab = Window:CreateTab("Misc", 4483362458)
 local ExtrasTab = Window:CreateTab("Extras", 4483362458)
 
 -- =========================
--- ======= FUNCTIONS ======
+-- ======= FPS BAR =========
 -- =========================
+local fpsLabel = Instance.new("TextLabel")
+fpsLabel.Size = UDim2.new(0,100,0,25)
+fpsLabel.Position = UDim2.new(0,10,0,10)
+fpsLabel.BackgroundTransparency = 0.5
+fpsLabel.BackgroundColor3 = Color3.fromRGB(0,0,0)
+fpsLabel.TextColor3 = Color3.fromRGB(0,255,0)
+fpsLabel.TextScaled = true
+fpsLabel.Font = Enum.Font.SourceSansBold
+fpsLabel.Parent = game.CoreGui
 
--- ESP
+local lastTime = tick()
+local fps = 0
+RunService.RenderStepped:Connect(function()
+    local currentTime = tick()
+    fps = 1 / (currentTime - lastTime)
+    lastTime = currentTime
+    fpsLabel.Text = "FPS: "..math.floor(fps)
+end)
+
+-- =========================
+-- ======= ESP =============
+-- =========================
 local function createESP(player)
     if ESPs[player] then return end
     local character = player.Character
@@ -119,27 +148,41 @@ local function updateESP()
 end
 
 -- =========================
--- ======= INFINITE SPRINT (Laggy but slightly optimized) ======
+-- ======= INFINITE SPRINT AUTO-PATCH =========
 -- =========================
-
-local function toggleInfiniteSprint(enable)
-    Settings.InfiniteSprint = enable
-end
-
 table.insert(connections, RunService.RenderStepped:Connect(function()
-    if Settings.InfiniteSprint then
+    if Settings.InfiniteSprint and LocalPlayer.Character then
         for i,v in pairs(getgc(true)) do
             if type(v)=="table" and rawget(v,"S") then
-                v.S = 100
-                break -- early exit to reduce lag
+                v.S = 100 -- auto-apply sprint every frame
             end
         end
     end
 end))
 
 -- =========================
--- ======= AIMLOCK ======
+-- ======= AIMLOCK CENTERED =========
 -- =========================
+local FOVCircle
+pcall(function()
+    FOVCircle = Drawing.new("Circle")
+    FOVCircle.Visible = false
+    FOVCircle.Color = Color3.fromRGB(255,0,0)
+    FOVCircle.Thickness = 2
+    FOVCircle.NumSides = 100
+    FOVCircle.Radius = Settings.AimlockFOV
+    FOVCircle.Filled = false
+end)
+
+local ScreenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+RunService.RenderStepped:Connect(function()
+    if FOVCircle then
+        FOVCircle.Position = ScreenCenter
+        FOVCircle.Radius = Settings.AimlockFOV
+        FOVCircle.Visible = Settings.AimlockEnabled
+    end
+end)
 
 local function aimAtTarget(target)
     if target and target:FindFirstChild("Head") and target:FindFirstChild("HumanoidRootPart") then
@@ -160,7 +203,7 @@ local function runAimlock()
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
             local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
             if onScreen then
-                local dist = (Vector2.new(screenPos.X,screenPos.Y)-Vector2.new(Mouse.X,Mouse.Y)).Magnitude
+                local dist = (Vector2.new(screenPos.X,screenPos.Y)-ScreenCenter).Magnitude
                 if dist < shortest then
                     shortest = dist
                     closest = player
@@ -171,38 +214,28 @@ local function runAimlock()
     if closest then aimAtTarget(closest.Character) end
 end
 
--- =========================
--- ======= NOCLIP ======
--- =========================
-
-local function setNoClip(enable)
-    Settings.NoClipEnabled = enable
-end
-
--- =========================
--- ======= SAFE AIMLOCK FOV CIRCLE ======
--- =========================
-local FOVCircle
-pcall(function()
-    FOVCircle = Drawing.new("Circle")
-    FOVCircle.Visible = false
-    FOVCircle.Color = Color3.fromRGB(255,0,0)
-    FOVCircle.Thickness = 2
-    FOVCircle.NumSides = 100
-    FOVCircle.Radius = Settings.AimlockFOV
-    FOVCircle.Filled = false
+UserInputService.InputBegan:Connect(function(input,gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimlockActive = true end
+end)
+UserInputService.InputEnded:Connect(function(input,gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimlockActive = false end
 end)
 
-RunService.RenderStepped:Connect(function()
-    if FOVCircle then
-        FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y)
-        FOVCircle.Radius = Settings.AimlockFOV
-        FOVCircle.Visible = Settings.AimlockEnabled
+-- =========================
+-- ======= NOCLIP =========
+-- =========================
+table.insert(connections, RunService.Stepped:Connect(function()
+    if Settings.NoClipEnabled and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
     end
-end)
+end))
 
 -- =========================
--- ======= MELEE AURA / REACH PUNCH ======
+-- ======= MELEE AURA / REACH =========
 -- =========================
 RunService.RenderStepped:Connect(function()
     if Settings.MeleeAuraEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -212,7 +245,7 @@ RunService.RenderStepped:Connect(function()
                 if distance <= Settings.MeleeReach then
                     local humanoid = player.Character:FindFirstChild("Humanoid")
                     if humanoid then
-                        humanoid:TakeDamage(10) -- adjustable damage
+                        humanoid:TakeDamage(10)
                     end
                 end
             end
@@ -221,42 +254,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- =========================
--- ======= CONNECTIONS ======
--- =========================
-table.insert(connections, RunService.Stepped:Connect(function()
-    if Settings.NoClipEnabled and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
-end))
-
-table.insert(connections, RunService.RenderStepped:Connect(function()
-    if Settings.ESPEnabled then updateESP() else
-        for player,_ in pairs(ESPs) do removeESP(player) end
-    end
-    if Settings.AimlockEnabled then runAimlock() end
-    Camera.FieldOfView = Settings.PlayerFOV
-end))
-
-table.insert(connections, LocalPlayer.CharacterAdded:Connect(function()
-    wait(0.5)
-    if Settings.ESPEnabled then updateESP() end
-end))
-
-UserInputService.InputBegan:Connect(function(input,gpe)
-    if gpe then return end
-    if input.UserInputType==Enum.UserInputType.MouseButton2 then Settings.AimlockActive=true end
-end)
-UserInputService.InputEnded:Connect(function(input,gpe)
-    if gpe then return end
-    if input.UserInputType==Enum.UserInputType.MouseButton2 then Settings.AimlockActive=false end
-end)
-
--- =========================
--- ======= UI ELEMENTS ======
+-- ======= UI ELEMENTS =========
 -- =========================
 
 -- Combat Tab
@@ -268,14 +266,12 @@ CombatTab:CreateToggle({Name="Melee Aura", CurrentValue=false, Flag="MeleeAura",
 CombatTab:CreateSlider({Name="Melee Reach", Range={1,30}, Increment=1, Suffix=" studs", CurrentValue=10, Flag="MeleeReach", Callback=function(v) Settings.MeleeReach=v end})
 
 -- Misc Tab
-MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) setNoClip(v) end})
-MiscTab:CreateToggle({Name="Infinite Sprint", CurrentValue=false, Flag="InfiniteSprint", Callback=function(v) toggleInfiniteSprint(v) end})
+MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) Settings.NoClipEnabled=v end})
+MiscTab:CreateToggle({Name="Infinite Sprint", CurrentValue=false, Flag="InfiniteSprint", Callback=function(v) Settings.InfiniteSprint=v end})
 MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v end})
 
 -- Extras Tab
-ExtrasTab:CreateButton({Name="Copy Discord", Callback=function()
-    setclipboard("https://discord.gg/dJEM47ZtGa")
-end})
+ExtrasTab:CreateButton({Name="Copy Discord", Callback=function() setclipboard("https://discord.gg/dJEM47ZtGa") end})
 ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
     for _,conn in pairs(connections) do conn:Disconnect() end
     for player,_ in pairs(ESPs) do removeESP(player) end
@@ -289,4 +285,4 @@ ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
     print("Loader fully unloaded!")
 end})
 
-print("UniScript BETA ready: 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, Wallbang, Player FOV, Melee Aura, Safe Visual FOV Circle, Unload functional.")
+print("UniScript BETA ready: 3 Tabs, Centered Aimlock FOV, FPS Bar, Auto Infinite Sprint, ESP, Wallbang, Player FOV, Melee Aura, Safe Rayfield, Unload functional.")
