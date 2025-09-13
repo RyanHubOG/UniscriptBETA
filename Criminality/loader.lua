@@ -1,4 +1,4 @@
---// Loader.lua for Roblox (UniScript BETA, 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, Wallbang, NoClip, Reach Punch, Visual FOV, Unload)
+--// Loader.lua for Roblox (UniScript BETA, 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, Wallbang, NoClip, Reach Punch, Safe Visual FOV, Unload)
 
 -- Services
 local Players = game:GetService("Players")
@@ -180,27 +180,30 @@ local function setNoClip(enable)
 end
 
 -- =========================
--- ======= AIMLOCK FOV CIRCLE ======
+-- ======= SAFE AIMLOCK FOV CIRCLE ======
 -- =========================
-local DrawingService = Drawing
-local FOVCircle = DrawingService.new("Circle")
-FOVCircle.Visible = false
-FOVCircle.Color = Color3.fromRGB(255,0,0)
-FOVCircle.Thickness = 2
-FOVCircle.NumSides = 100
-FOVCircle.Radius = Settings.AimlockFOV
-FOVCircle.Filled = false
+local FOVCircle
+pcall(function()
+    FOVCircle = Drawing.new("Circle")
+    FOVCircle.Visible = false
+    FOVCircle.Color = Color3.fromRGB(255,0,0)
+    FOVCircle.Thickness = 2
+    FOVCircle.NumSides = 100
+    FOVCircle.Radius = Settings.AimlockFOV
+    FOVCircle.Filled = false
+end)
 
 RunService.RenderStepped:Connect(function()
-    FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y)
-    FOVCircle.Radius = Settings.AimlockFOV
-    FOVCircle.Visible = Settings.AimlockEnabled
+    if FOVCircle then
+        FOVCircle.Position = Vector2.new(Mouse.X, Mouse.Y)
+        FOVCircle.Radius = Settings.AimlockFOV
+        FOVCircle.Visible = Settings.AimlockEnabled
+    end
 end)
 
 -- =========================
 -- ======= MELEE AURA / REACH PUNCH ======
 -- =========================
-
 RunService.RenderStepped:Connect(function()
     if Settings.MeleeAuraEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
         for _,player in pairs(Players:GetPlayers()) do
@@ -220,7 +223,6 @@ end)
 -- =========================
 -- ======= CONNECTIONS ======
 -- =========================
-
 table.insert(connections, RunService.Stepped:Connect(function()
     if Settings.NoClipEnabled and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -287,4 +289,4 @@ ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
     print("Loader fully unloaded!")
 end})
 
-print("UniScript BETA ready: 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, Wallbang, Player FOV, Melee Aura, Visual FOV Circle, Unload functional.")
+print("UniScript BETA ready: 3 Tabs, Laggy Infinite Sprint, ESP, Aimlock, Wallbang, Player FOV, Melee Aura, Safe Visual FOV Circle, Unload functional.")
