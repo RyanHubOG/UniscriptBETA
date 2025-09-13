@@ -1,4 +1,4 @@
---// UniScript BETA Loader (Full Optimized Version with Low-Lag Infinite Sprint)
+--// UniScript BETA Loader (Reliable & Optimized)
 
 -- Services
 local Players = game:GetService("Players")
@@ -27,15 +27,22 @@ local ESPs = {}
 local connections = {}
 
 -- =========================
--- SAFE RAYFIELD LOADING
+-- RELIABLE RAYFIELD LOADING
 -- =========================
-local success, Rayfield = pcall(function()
-    return loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
+local Rayfield
+local success, result = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/Rayfield.lua"))()
 end)
 
-if not success or not Rayfield then
-    warn("Rayfield failed to load. UI will not appear.")
-    return
+if success and result then
+    Rayfield = result
+else
+    if pcall(function() readfile("Rayfield.lua") end) then
+        Rayfield = loadstring(readfile("Rayfield.lua"))()
+    else
+        warn("Rayfield failed to load. Make sure the URL works or 'Rayfield.lua' exists locally.")
+        return
+    end
 end
 
 local Window = Rayfield:CreateWindow({
@@ -190,96 +197,3 @@ MiscTab:CreateToggle({
         SprintEnabled = v
     end
 })
-
--- =========================
--- AIMLOCK CENTERED
--- =========================
-local FOVCircle
-pcall(function()
-    FOVCircle = Drawing.new("Circle")
-    FOVCircle.Visible = false
-    FOVCircle.Color = Color3.fromRGB(255,0,0)
-    FOVCircle.Thickness = 2
-    FOVCircle.NumSides = 100
-    FOVCircle.Radius = Settings.AimlockFOV
-    FOVCircle.Filled = false
-end)
-
-local ScreenCenter = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-
-RunService.RenderStepped:Connect(function()
-    if FOVCircle then
-        FOVCircle.Position = ScreenCenter
-        FOVCircle.Radius = Settings.AimlockFOV
-        FOVCircle.Visible = Settings.AimlockEnabled
-    end
-end)
-
-local function aimAtTarget(target)
-    if target and target:FindFirstChild("Head") and target:FindFirstChild("HumanoidRootPart") then
-        local cam = Camera
-        local head = target.Head
-        local root = target.HumanoidRootPart
-        local predictedPos = head.Position + root.Velocity * Settings.AimlockPrediction
-        local direction = (predictedPos - cam.CFrame.Position).Unit
-        cam.CFrame = CFrame.new(cam.CFrame.Position, cam.CFrame.Position + direction)
-    end
-end
-
-local function runAimlock()
-    if not Settings.AimlockActive then return end
-    local closest
-    local shortest = Settings.AimlockFOV
-    for _,player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local screenPos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
-            if onScreen then
-                local dist = (Vector2.new(screenPos.X,screenPos.Y)-ScreenCenter).Magnitude
-                if dist < shortest then
-                    shortest = dist
-                    closest = player
-                end
-            end
-        end
-    end
-    if closest then aimAtTarget(closest.Character) end
-end
-
-UserInputService.InputBegan:Connect(function(input,gpe)
-    if gpe then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimlockActive = true end
-end)
-
-UserInputService.InputEnded:Connect(function(input,gpe)
-    if gpe then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimlockActive = false end
-end)
-
--- =========================
--- COMBAT TAB UI
--- =========================
-CombatTab:CreateToggle({Name="Aimlock", CurrentValue=false, Flag="Aimlock", Callback=function(v) Settings.AimlockEnabled=v end})
-CombatTab:CreateSlider({Name="Aimlock FOV", Range={50,500}, Increment=5, Suffix="px", CurrentValue=150, Flag="AimlockFOV", Callback=function(v) Settings.AimlockFOV=v if FOVCircle then FOVCircle.Radius=v end end})
-CombatTab:CreateSlider({Name="Aimlock Prediction", Range={0,0.5}, Increment=0.01, Suffix="", CurrentValue=0.18, Flag="AimlockPrediction", Callback=function(v) Settings.AimlockPrediction=v end})
-CombatTab:CreateToggle({Name="Wallbang", CurrentValue=false, Flag="Wallbang", Callback=function(v) Settings.WallbangEnabled=v end})
-CombatTab:CreateToggle({Name="Melee Aura", CurrentValue=false, Flag="MeleeAura", Callback=function(v) Settings.MeleeAuraEnabled=v end})
-CombatTab:CreateSlider({Name="Melee Reach", Range={1,30}, Increment=1, Suffix=" studs", CurrentValue=10, Flag="MeleeReach", Callback=function(v) Settings.MeleeReach=v end})
-
--- =========================
--- MISC TAB UI
--- =========================
-MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) Settings.NoClipEnabled=v end})
-MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v Camera.FieldOfView=v end})
-
--- =========================
--- EXTRAS TAB UI
--- =========================
-ExtrasTab:CreateButton({Name="Copy Discord", Callback=function() setclipboard("https://discord.gg/dJEM47ZtGa") end})
-ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
-    for _, conn in pairs(connections) do conn:Disconnect() end
-    for player, _ in pairs(ESPs) do ESPs[player].Billboard:Destroy() end
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then LocalPlayer.Character.Humanoid.WalkSpeed=16 end
-    Camera.FieldOfView = 70
-    if Window then Window:Unload() end
-    print("UniScript fully unloaded!")
-end})
