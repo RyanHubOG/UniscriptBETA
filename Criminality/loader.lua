@@ -1,4 +1,4 @@
---// UniScript BETA Loader.lua
+--// UniScript BETA Loader (Optimized)
 
 -- Services
 local Players = game:GetService("Players")
@@ -27,7 +27,7 @@ local ESPs = {}
 local connections = {}
 
 -- =========================
--- ======= SAFE RAYFIELD LOADING ======
+-- SAFE RAYFIELD LOADING
 -- =========================
 local success, Rayfield = pcall(function()
     return loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'))()
@@ -53,7 +53,7 @@ local MiscTab = Window:CreateTab("Misc", 4483362458)
 local ExtrasTab = Window:CreateTab("Extras", 4483362458)
 
 -- =========================
--- ======= FPS BAR =========
+-- FPS BAR
 -- =========================
 local fpsLabel = Instance.new("TextLabel")
 fpsLabel.Size = UDim2.new(0,100,0,25)
@@ -63,7 +63,8 @@ fpsLabel.BackgroundColor3 = Color3.fromRGB(0,0,0)
 fpsLabel.TextColor3 = Color3.fromRGB(0,255,0)
 fpsLabel.TextScaled = true
 fpsLabel.Font = Enum.Font.SourceSansBold
-fpsLabel.Parent = game.CoreGui
+fpsLabel.ResetOnSpawn = false
+fpsLabel.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
 local lastTime = tick()
 local fps = 0
@@ -75,7 +76,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- =========================
--- ======= ESP =============
+-- ESP
 -- =========================
 local function createESP(player)
     if ESPs[player] then return end
@@ -88,7 +89,7 @@ local function createESP(player)
     billboard.Adornee = character.HumanoidRootPart
     billboard.AlwaysOnTop = true
     billboard.StudsOffset = Vector3.new(0,2,0)
-    billboard.Parent = game.CoreGui
+    billboard.Parent = game:GetService("CoreGui")
 
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Size = UDim2.new(1,0,0.4,0)
@@ -148,20 +149,25 @@ local function updateESP()
 end
 
 -- =========================
--- ======= INFINITE SPRINT AUTO-PATCH =========
+-- INFINITE SPRINT (Lag Optimized)
 -- =========================
-table.insert(connections, RunService.RenderStepped:Connect(function()
+local lastSprintPatch = 0
+table.insert(connections, RunService.RenderStepped:Connect(function(dt)
     if Settings.InfiniteSprint and LocalPlayer.Character then
-        for i,v in pairs(getgc(true)) do
-            if type(v)=="table" and rawget(v,"S") then
-                v.S = 100 -- auto-apply sprint every frame
+        if tick() - lastSprintPatch > 1 then -- patch only once per second
+            for i,v in pairs(getgc(true)) do
+                if type(v) == "table" and rawget(v,"S") then
+                    v.S = 100
+                    lastSprintPatch = tick()
+                    break
+                end
             end
         end
     end
 end))
 
 -- =========================
--- ======= AIMLOCK CENTERED =========
+-- AIMLOCK CENTERED
 -- =========================
 local FOVCircle
 pcall(function()
@@ -222,67 +228,3 @@ UserInputService.InputEnded:Connect(function(input,gpe)
     if gpe then return end
     if input.UserInputType == Enum.UserInputType.MouseButton2 then Settings.AimlockActive = false end
 end)
-
--- =========================
--- ======= NOCLIP =========
--- =========================
-table.insert(connections, RunService.Stepped:Connect(function()
-    if Settings.NoClipEnabled and LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
-        end
-    end
-end))
-
--- =========================
--- ======= MELEE AURA / REACH =========
--- =========================
-RunService.RenderStepped:Connect(function()
-    if Settings.MeleeAuraEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        for _,player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                local distance = (player.Character.HumanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                if distance <= Settings.MeleeReach then
-                    local humanoid = player.Character:FindFirstChild("Humanoid")
-                    if humanoid then
-                        humanoid:TakeDamage(10)
-                    end
-                end
-            end
-        end
-    end
-end)
-
--- =========================
--- ======= UI ELEMENTS =========
--- =========================
-
--- Combat Tab
-CombatTab:CreateToggle({Name="Aimlock", CurrentValue=false, Flag="Aimlock", Callback=function(v) Settings.AimlockEnabled=v end})
-CombatTab:CreateSlider({Name="Aimlock FOV", Range={50,500}, Increment=5, Suffix="px", CurrentValue=150, Flag="AimlockFOV", Callback=function(v) Settings.AimlockFOV=v end})
-CombatTab:CreateSlider({Name="Aimlock Prediction", Range={0,0.5}, Increment=0.01, Suffix="", CurrentValue=0.18, Flag="AimlockPrediction", Callback=function(v) Settings.AimlockPrediction=v end})
-CombatTab:CreateToggle({Name="Wallbang", CurrentValue=false, Flag="Wallbang", Callback=function(v) Settings.WallbangEnabled=v end})
-CombatTab:CreateToggle({Name="Melee Aura", CurrentValue=false, Flag="MeleeAura", Callback=function(v) Settings.MeleeAuraEnabled=v end})
-CombatTab:CreateSlider({Name="Melee Reach", Range={1,30}, Increment=1, Suffix=" studs", CurrentValue=10, Flag="MeleeReach", Callback=function(v) Settings.MeleeReach=v end})
-
--- Misc Tab
-MiscTab:CreateToggle({Name="NoClip", CurrentValue=false, Flag="NoClip", Callback=function(v) Settings.NoClipEnabled=v end})
-MiscTab:CreateToggle({Name="Infinite Sprint", CurrentValue=false, Flag="InfiniteSprint", Callback=function(v) Settings.InfiniteSprint=v end})
-MiscTab:CreateSlider({Name="Player FOV", Range={70,120}, Increment=1, Suffix="", CurrentValue=Camera.FieldOfView, Flag="PlayerFOV", Callback=function(v) Settings.PlayerFOV=v end})
-
--- Extras Tab
-ExtrasTab:CreateButton({Name="Copy Discord", Callback=function() setclipboard("https://discord.gg/dJEM47ZtGa") end})
-ExtrasTab:CreateButton({Name="Unload Script", Callback=function()
-    for _,conn in pairs(connections) do conn:Disconnect() end
-    for player,_ in pairs(ESPs) do removeESP(player) end
-    if LocalPlayer.Character then
-        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = true end
-        end
-    end
-    Camera.FieldOfView = 70
-    if Window then Window:Unload() end
-    print("Loader fully unloaded!")
-end})
-
-print("UniScript BETA ready: 3 Tabs, Centered Aimlock FOV, FPS Bar, Auto Infinite Sprint, ESP, Wallbang, Player FOV, Melee Aura, Safe Rayfield, Unload functional.")
