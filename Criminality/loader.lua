@@ -1,4 +1,4 @@
---// UniScript BETA Loader (Optimized)
+--// UniScript BETA Loader (Optimized, Lag-Free Infinite Sprint)
 
 -- Services
 local Players = game:GetService("Players")
@@ -149,19 +149,18 @@ local function updateESP()
 end
 
 -- =========================
--- INFINITE SPRINT (Lag Optimized)
+-- INFINITE SPRINT (Lag-Free WalkSpeed)
 -- =========================
-local lastSprintPatch = 0
-table.insert(connections, RunService.RenderStepped:Connect(function(dt)
-    if Settings.InfiniteSprint and LocalPlayer.Character then
-        if tick() - lastSprintPatch > 1 then -- patch only once per second
-            for i,v in pairs(getgc(true)) do
-                if type(v) == "table" and rawget(v,"S") then
-                    v.S = 100
-                    lastSprintPatch = tick()
-                    break
-                end
-            end
+local defaultSpeed = 16
+local sprintSpeed = 100
+
+table.insert(connections, RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        local humanoid = LocalPlayer.Character.Humanoid
+        if Settings.InfiniteSprint then
+            humanoid.WalkSpeed = sprintSpeed
+        else
+            humanoid.WalkSpeed = defaultSpeed
         end
     end
 end))
