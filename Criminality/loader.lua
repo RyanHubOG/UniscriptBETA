@@ -1,345 +1,504 @@
--- uniScript: All-in-One Mod Menu
--- EXPLOIT ONLY: getgc, setclipboard, Drawing
-
+--// Combat Tab Functions
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- ===== SETTINGS =====
-local ModifierEnabled = false
-local ESPEnabled = false
-local ESPPlayers = true
-local ESPTools = true
-local AimlockEnabled = false
-local FOVEnabled = true
-local FOVRadius = 150
-local FOVSliderValue = 70 -- default FOV
-local LoopConnection = nil
-local PlayerESP = {}
-local ToolESP = {}
-local FOVCircle = nil
+-- Infinite Sprint
+local modifierEnabled = false
+local loopConnection = nil
 
--- ===== HELPER FUNCTIONS =====
 local function findTablesWithS()
     local tables = {}
     for _, tbl in getgc(true) do
-        if typeof(tbl) == "table" and rawget(tbl,"S") and typeof(rawget(tbl,"S"))=="number" then
-            table.insert(tables,tbl)
+        if typeof(tbl) == "table" and rawget(tbl, "S") then
+            if typeof(rawget(tbl, "S")) == "number" then
+                table.insert(tables, tbl)
+            end
         end
     end
     return tables
 end
 
--- ===== MODIFIER =====
 local function startModifier()
-    if LoopConnection then LoopConnection:Disconnect() LoopConnection=nil end
-    if not ModifierEnabled then return end
+    if loopConnection then loopConnection:Disconnect() loopConnection = nil end
+    if not modifierEnabled then return end
     local tables = findTablesWithS()
-    LoopConnection = RunService.Heartbeat:Connect(function()
-        for _,tbl in pairs(tables) do rawset(tbl,"S",100) end
+    loopConnection = RunService.Heartbeat:Connect(function()
+        for _, tbl in tables do
+            rawset(tbl, "S", 100)
+        end
     end)
 end
 
 local function stopModifier()
-    if LoopConnection then LoopConnection:Disconnect() LoopConnection=nil end
+    if loopConnection then loopConnection:Disconnect() loopConnection = nil end
 end
 
--- ===== ESP =====
-local function createText()
-    local t = Drawing.new("Text")
-    t.Size=16 t.Center=true t.Outline=true t.Visible=true t.ZIndex=2
-    return t
+-- Aimlock
+local aimlockEnabled = false
+local holdingRightClick = false
+local prediction = 0.12 -- adjust prediction strength
+
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        holdingRightClick = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        holdingRightClick = false
+    end
+end)
+
+local function getClosestPlayer()
+    local closest, dist = nil, math.huge
+    local mousePos = UserInputService:GetMouseLocation()
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+            local hrp = plr.Character.HumanoidRootPart
+            local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local mag = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                if mag < dist then
+                    dist = mag
+                    closest = plr
+                end
+            end
+        end
+    end
+    return closest
 end
 
+RunService.RenderStepped:Connect(function()
+    if aimlockEnabled and holdingRightClick then
+        local target = getClosestPlayer()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = target.Character.HumanoidRootPart
+            local vel = hrp.Velocity * prediction
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, hrp.Position + vel)
+        end
+    end
+end)
+
+--// Combat Tab Buttons (will be added to GUI later)
+local function CombatTab(container)
+    local sprintBtn = Instance.new("TextButton", container)
+    sprintBtn.Size = UDim2.new(0,120,0,30)
+    sprintBtn.Position = UDim2.new(0.05,0,0.1,0)
+    sprintBtn.Text = "Inf Sprint: OFF"
+    sprintBtn.MouseButton1Click:Connect(function()
+        modifierEnabled = not modifierEnabled
+        sprintBtn.Text = "Inf Sprint: "..(modifierEnabled and "ON" or "OFF")
+        if modifierEnabled then startModifier() else stopModifier() end
+    end)
+
+    local aimBtn = Instance.new("TextButton", container)
+    aimBtn.Size = UDim2.new(0,120,0,30)
+    aimBtn.Position = UDim2.new(0.55,0,0.1,0)
+    aimBtn.Text = "Aimlock: OFF"
+    aimBtn.MouseButton1Click:Connect(function()
+        aimlockEnabled = not aimlockEnabled
+        aimBtn.Text = "Aimlock: "..(aimlockEnabled and "ON" or "OFF")
+    end)
+end
+--// Misc Tab Functions
+
+local espEnabled = false
+local espConnection
+local playerESP = {}
+local fovEnabled = true
+local fovRadius = 150
+
+-- ESP Drawing
 local function createBox()
-    local b = Drawing.new("Square")
-    b.Thickness=2 b.Filled=false b.Visible=true b.ZIndex=2
-    return b
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Filled = false
+    box.Color = Color3.fromRGB(0, 255, 0)
+    box.Visible = false
+    return box
 end
 
-local function worldToViewport(pos)
-    local screenPoint, onScreen = Camera:WorldToViewportPoint(pos)
-    return Vector2.new(screenPoint.X, screenPoint.Y), onScreen
+local function createName()
+    local txt = Drawing.new("Text")
+    txt.Size = 14
+    txt.Center = true
+    txt.Outline = true
+    txt.Color = Color3.fromRGB(0,255,0)
+    txt.Visible = false
+    return txt
 end
 
-local function addPlayerESP(plr)
-    if PlayerESP[plr] then return end
-    local text = createText()
-    local box = createBox()
-    PlayerESP[plr] = {plr=plr, box=box, text=text}
-end
-
-local function removePlayerESP(plr)
-    if PlayerESP[plr] then
-        pcall(function() PlayerESP[plr].box:Remove() end)
-        pcall(function() PlayerESP[plr].text:Remove() end)
-        PlayerESP[plr]=nil
+local function clearESP()
+    for _, data in pairs(playerESP) do
+        if data.box then data.box:Remove() end
+        if data.name then data.name:Remove() end
     end
-end
-
-local function addToolESP(inst)
-    if ToolESP[inst] then return end
-    local text = createText()
-    text.Text = inst.Name
-    ToolESP[inst]={inst=inst,text=text}
-end
-
-local function removeToolESP(inst)
-    if ToolESP[inst] then
-        pcall(function() ToolESP[inst].text:Remove() end)
-        ToolESP[inst]=nil
-    end
+    playerESP = {}
 end
 
 local function updateESP()
-    if not ESPEnabled then return end
-    -- Player ESP
-    if ESPPlayers then
-        for _, plr in pairs(Players:GetPlayers()) do
-            if plr~=LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                addPlayerESP(plr)
-                local data=PlayerESP[plr]
-                local hrp=plr.Character.HumanoidRootPart
-                local topPos=hrp.Position+Vector3.new(0,2,0)
-                local botPos=hrp.Position-Vector3.new(0,1,0)
-                local top2D, topOn=worldToViewport(topPos)
-                local bot2D, botOn=worldToViewport(botPos)
-                if topOn and botOn then
-                    local height=math.abs(top2D.Y-bot2D.Y)
-                    local width=math.clamp(height*0.5,20,120)
-                    data.box.Size=Vector2.new(width,height)
-                    data.box.Position=top2D-Vector2.new(width/2,0)
-                    data.box.Visible=true
-                    data.text.Position=top2D-Vector2.new(0,12)
-                    data.text.Text=plr.Name
-                    data.text.Visible=true
-                else
-                    data.box.Visible=false
-                    data.text.Visible=false
-                end
-            else
-                removePlayerESP(plr)
-            end
-        end
-    end
-    -- Tool ESP
-    if ESPTools then
-        for _, inst in pairs(workspace:GetDescendants()) do
-            if (inst:IsA("Tool") or inst:IsA("Model")) and inst.PrimaryPart then
-                addToolESP(inst)
-                local data=ToolESP[inst]
-                local p2D, onScreen=worldToViewport(inst.PrimaryPart.Position)
-                if onScreen then
-                    data.text.Position=p2D
-                    data.text.Visible=true
-                else
-                    data.text.Visible=false
-                end
-            end
-        end
-        for inst,_ in pairs(ToolESP) do
-            if not inst:IsDescendantOf(game) then removeToolESP(inst) end
-        end
-    end
-end
-
--- ===== AIMLOCK =====
-local mouse=LocalPlayer:GetMouse()
-local function getClosestHead()
-    local closestDist=math.huge
-    local target=nil
-    local mousePos=UserInputService:GetMouseLocation()
     for _, plr in pairs(Players:GetPlayers()) do
-        if plr~=LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health>0 then
-            local head=plr.Character.Head
-            local screenPos, onScreen=Camera:WorldToViewportPoint(head.Position)
-            if onScreen then
-                local dist=(Vector2.new(screenPos.X,screenPos.Y)-mousePos).Magnitude
-                if dist<closestDist then
-                    closestDist=dist
-                    target=head
-                end
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            if not playerESP[plr] then
+                playerESP[plr] = {
+                    box = createBox(),
+                    name = createName(),
+                }
             end
+            local hrp = plr.Character.HumanoidRootPart
+            local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local size = math.clamp(2000 / pos.Z, 20, 150)
+                playerESP[plr].box.Size = Vector2.new(size, size*1.5)
+                playerESP[plr].box.Position = Vector2.new(pos.X - size/2, pos.Y - size/2)
+                playerESP[plr].box.Visible = true
+
+                playerESP[plr].name.Position = Vector2.new(pos.X, pos.Y - size/2 - 12)
+                playerESP[plr].name.Text = plr.Name
+                playerESP[plr].name.Visible = true
+            else
+                playerESP[plr].box.Visible = false
+                playerESP[plr].name.Visible = false
+            end
+        elseif playerESP[plr] then
+            playerESP[plr].box:Remove()
+            playerESP[plr].name:Remove()
+            playerESP[plr] = nil
         end
     end
-    return target
 end
 
--- ===== FOV Circle / Player FOV =====
-FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness=2 FOVCircle.Filled=false FOVCircle.Color=Color3.fromRGB(0,255,0) FOVCircle.NumSides=64 FOVCircle.Visible=true FOVCircle.ZIndex=2
-
-RunService.RenderStepped:Connect(function()
-    if ESPEnabled then pcall(updateESP) end
-    if FOVEnabled then
-        local mousePos=UserInputService:GetMouseLocation()
-        FOVCircle.Position=mousePos
-        FOVCircle.Radius=FOVRadius
-        FOVCircle.Visible=true
-    else
-        FOVCircle.Visible=false
-    end
-end)
-
--- ===== UI =====
-local GUI = Instance.new("ScreenGui",LocalPlayer:WaitForChild("PlayerGui"))
-GUI.Name="uniScriptGUI"
-GUI.ResetOnSpawn=false
-
-local frame=Instance.new("Frame",GUI)
-frame.Size=UDim2.new(0,300,0,300)
-frame.Position=UDim2.new(0.5,-150,0.3,0)
-frame.BackgroundColor3=Color3.fromRGB(35,35,35)
-frame.BorderSizePixel=0
-frame.Active=true
-
--- Tabs
-local Tabs={"Combat","Misc","UI"}
-local tabButtons={}
-local tabContents={}
-for i,name in pairs(Tabs) do
-    local btn=Instance.new("TextButton",frame)
-    btn.Size=UDim2.new(0,90,0,30)
-    btn.Position=UDim2.new(0.05+(i-1)*0.32,0,0,0)
-    btn.Text=name
-    btn.Font=Enum.Font.SourceSansBold
-    btn.TextSize=16
-    tabButtons[name]=btn
-
-    local content=Instance.new("Frame",frame)
-    content.Size=UDim2.new(1,0,1,-40)
-    content.Position=UDim2.new(0,0,0,40)
-    content.Visible=(i==1)
-    tabContents[name]=content
-
-    btn.MouseButton1Click:Connect(function()
-        for _,f in pairs(tabContents) do f.Visible=false end
-        content.Visible=true
+local function startESP()
+    if espConnection then espConnection:Disconnect() end
+    espConnection = RunService.RenderStepped:Connect(function()
+        if espEnabled then
+            updateESP()
+        end
     end)
 end
 
--- ===== Combat Tab =====
-local combat=tabContents["Combat"]
-local modBtn=Instance.new("TextButton",combat)
-modBtn.Size=UDim2.new(0,120,0,30) modBtn.Position=UDim2.new(0.05,0,0.05,0)
-modBtn.Text="Modifier: OFF"
-modBtn.MouseButton1Click:Connect(function()
-    ModifierEnabled=not ModifierEnabled
-    modBtn.Text="Modifier: "..(ModifierEnabled and "ON" or "OFF")
-    if ModifierEnabled then startModifier() else stopModifier() end
+local function stopESP()
+    if espConnection then espConnection:Disconnect() espConnection=nil end
+    clearESP()
+end
+
+-- FOV Circle
+local fovCircle = Drawing.new("Circle")
+fovCircle.Thickness = 2
+fovCircle.Filled = false
+fovCircle.Color = Color3.fromRGB(255, 0, 0)
+fovCircle.Visible = fovEnabled
+fovCircle.NumSides = 64
+
+RunService.RenderStepped:Connect(function()
+    local mouse = UserInputService:GetMouseLocation()
+    fovCircle.Position = mouse
+    fovCircle.Radius = fovRadius
+    fovCircle.Visible = fovEnabled
 end)
 
-local aimBtn=Instance.new("TextButton",combat)
-aimBtn.Size=UDim2.new(0,120,0,30) aimBtn.Position=UDim2.new(0.55,0,0.05,0)
-aimBtn.Text="Aimlock: OFF"
-aimBtn.MouseButton1Click:Connect(function()
-    AimlockEnabled=not AimlockEnabled
-    aimBtn.Text="Aimlock: "..(AimlockEnabled and "ON" or "OFF")
+--// Misc Tab Buttons (to GUI later)
+local function MiscTab(container)
+    local espBtn = Instance.new("TextButton", container)
+    espBtn.Size = UDim2.new(0,120,0,30)
+    espBtn.Position = UDim2.new(0.05,0,0.1,0)
+    espBtn.Text = "ESP: OFF"
+    espBtn.MouseButton1Click:Connect(function()
+        espEnabled = not espEnabled
+        espBtn.Text = "ESP: "..(espEnabled and "ON" or "OFF")
+        if espEnabled then startESP() else stopESP() end
+    end)
+
+    local fovBtn = Instance.new("TextButton", container)
+    fovBtn.Size = UDim2.new(0,120,0,30)
+    fovBtn.Position = UDim2.new(0.55,0,0.1,0)
+    fovBtn.Text = "FOV: "..(fovEnabled and "ON" or "OFF")
+    fovBtn.MouseButton1Click:Connect(function()
+        fovEnabled = not fovEnabled
+        fovBtn.Text = "FOV: "..(fovEnabled and "ON" or "OFF")
+    end)
+
+    -- FOV Slider
+    local slider = Instance.new("TextButton", container)
+    slider.Size = UDim2.new(0,200,0,20)
+    slider.Position = UDim2.new(0.05,0,0.25,0)
+    slider.Text = "FOV Radius: "..math.floor(fovRadius)
+
+    slider.MouseButton1Click:Connect(function()
+        fovRadius = fovRadius + 25
+        if fovRadius > 300 then fovRadius = 50 end
+        slider.Text = "FOV Radius: "..math.floor(fovRadius)
+    end)
+end
+--// UI Tab + Main GUI
+
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+-- Main UI
+local gui = Instance.new("ScreenGui")
+gui.Name = "uniScript"
+gui.ResetOnSpawn = false
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame", gui)
+mainFrame.Size = UDim2.new(0, 350, 0, 260)
+mainFrame.Position = UDim2.new(0.5, -175, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+mainFrame.BorderSizePixel = 0
+makeDraggable(mainFrame)
+
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1,0,0,28)
+title.BackgroundTransparency = 1
+title.Text = "uniScript"
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 20
+title.TextColor3 = Color3.new(1,1,1)
+
+-- Tab Buttons
+local tabs = Instance.new("Frame", mainFrame)
+tabs.Size = UDim2.new(1,0,0,30)
+tabs.Position = UDim2.new(0,0,0.12,0)
+tabs.BackgroundTransparency = 1
+
+local pages = Instance.new("Frame", mainFrame)
+pages.Size = UDim2.new(1,0,0.75,0)
+pages.Position = UDim2.new(0,0,0.25,0)
+pages.BackgroundTransparency = 1
+
+local function newTab(name, order, callback)
+    local btn = Instance.new("TextButton", tabs)
+    btn.Size = UDim2.new(0.3,0,1,0)
+    btn.Position = UDim2.new(0.35*(order-1),0,0,0)
+    btn.Text = name
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+
+    local page = Instance.new("Frame", pages)
+    page.Size = UDim2.new(1,0,1,0)
+    page.Visible = false
+    page.BackgroundTransparency = 1
+
+    btn.MouseButton1Click:Connect(function()
+        for _, child in pairs(pages:GetChildren()) do
+            child.Visible = false
+        end
+        page.Visible = true
+    end)
+
+    if callback then
+        callback(page)
+    end
+
+    if order == 1 then
+        page.Visible = true
+    end
+end
+
+-- Tabs hookup
+newTab("Combat", 1, CombatTab)
+newTab("Misc", 2, MiscTab)
+
+-- UI Tab
+newTab("UI", 3, function(container)
+    local copyBtn = Instance.new("TextButton", container)
+    copyBtn.Size = UDim2.new(0,140,0,30)
+    copyBtn.Position = UDim2.new(0.05,0,0.1,0)
+    copyBtn.Text = "Copy Discord"
+    copyBtn.MouseButton1Click:Connect(function()
+        if setclipboard then
+            setclipboard("https://discord.gg/b6fKAnYqtU")
+            copyBtn.Text = "Copied!"
+            task.delay(1,function() copyBtn.Text = "Copy Discord" end)
+        end
+    end)
+
+    local resetBtn = Instance.new("TextButton", container)
+    resetBtn.Size = UDim2.new(0,140,0,30)
+    resetBtn.Position = UDim2.new(0.55,0,0.1,0)
+    resetBtn.Text = "Reset UI"
+    resetBtn.MouseButton1Click:Connect(function()
+        mainFrame.Position = UDim2.new(0.5, -175, 0.2, 0)
+    end)
 end)
 
--- ===== Misc Tab =====
-local misc=tabContents["Misc"]
-local espBtn=Instance.new("TextButton",misc)
-espBtn.Size=UDim2.new(0,120,0,30) espBtn.Position=UDim2.new(0.05,0,0.05,0)
-espBtn.Text="ESP: OFF"
-espBtn.MouseButton1Click:Connect(function()
-    ESPEnabled=not ESPEnabled
-    espBtn.Text="ESP: "..(ESPEnabled and "ON" or "OFF")
+-- Alt key toggle
+UserInputService.InputBegan:Connect(function(input, gp)
+    if not gp and input.KeyCode == Enum.KeyCode.LeftAlt then
+        gui.Enabled = not gui.Enabled
+    end
 end)
+local ok, err = pcall(function()
+   
+              loadstring(game:HttpGet("https://raw.githubusercontent.com/RyanHubOG/UniscriptBETA/refs/heads/main/Criminality/uniscript.lua"))()
 
--- FOV Slider
-local fovSliderFrame=Instance.new("Frame",misc)
-fovSliderFrame.Size=UDim2.new(0,200,0,20) fovSliderFrame.Position=UDim2.new(0.05,0,0.25,0)
-fovSliderFrame.BackgroundColor3=Color3.fromRGB(60,60,60)
-local sliderFill=Instance.new("Frame",fovSliderFrame)
-sliderFill.Size=UDim2.new((FOVSliderValue-70)/50,0,1,0)
-sliderFill.BackgroundColor3=Color3.fromRGB(0,255,0)
+end)
+if not ok then
+    warn("Failed to load uniScript:", err)
+else
+    print("uniScript loaded successfully.")
+end
+local fovSliderFrame = Instance.new("Frame", miscContainer)
+fovSliderFrame.Size = UDim2.new(0,200,0,20)
+fovSliderFrame.Position = UDim2.new(0.05,0,0.25,0)
+fovSliderFrame.BackgroundColor3 = Color3.fromRGB(60,60,60)
 
-local dragging=false
+local sliderFill = Instance.new("Frame", fovSliderFrame)
+sliderFill.Size = UDim2.new((workspace.CurrentCamera.FieldOfView-70)/100,0,1,0) -- initial
+sliderFill.BackgroundColor3 = Color3.fromRGB(0,255,0)
+
+local dragging = false
 fovSliderFrame.InputBegan:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+    end
 end)
 fovSliderFrame.InputEnded:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
     if dragging and input.UserInputType==Enum.UserInputType.MouseMovement then
-        local mouseX=input.Position.X
-        local sliderX=math.clamp(mouseX-fovSliderFrame.AbsolutePosition.X,0,fovSliderFrame.AbsoluteSize.X)
-        sliderFill.Size=UDim2.new(sliderX/fovSliderFrame.AbsoluteSize.X,0,1,0)
-        FOVSliderValue=70+(sliderX/fovSliderFrame.AbsoluteSize.X)*50
-        workspace.CurrentCamera.FieldOfView=FOVSliderValue
-        FOVRadius=FOVSliderValue -- optional: sync circle
+        local mouseX = input.Position.X
+        local sliderX = math.clamp(mouseX - fovSliderFrame.AbsolutePosition.X,0,fovSliderFrame.AbsoluteSize.X)
+        sliderFill.Size = UDim2.new(sliderX/fovSliderFrame.AbsoluteSize.X,0,1,0)
+
+        -- Map slider to FOV range (70-120)
+        local newFOV = 70 + (sliderX/fovSliderFrame.AbsoluteSize.X) * 50
+        workspace.CurrentCamera.FieldOfView = newFOV
     end
 end)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- Copy Discord
-local copyBtn=Instance.new("TextButton",misc)
-copyBtn.Size=UDim2.new(0,120,0,30) copyBtn.Position=UDim2.new(0.05,0,0.55,0)
-copyBtn.Text="Copy Discord"
-copyBtn.MouseButton1Click:Connect(function()
-    if setclipboard then pcall(function() setclipboard("https://discord.gg/b6fKAnYqtU") end)
-    copyBtn.Text="Copied!"
-    task.delay(1.5,function() copyBtn.Text="Copy Discord" end)
-end)
+local ESPEnabled = true
+local ESPObjects = {}
 
--- ===== Draggable UI & Open/Close =====
-local drag, dragInput, dragStart, startPos
-local function update(input)
-    local delta=input.Position-dragStart
-    frame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+local function createESP(plr)
+    if ESPObjects[plr] then return end
+    local box = Drawing.new("Square")
+    box.Thickness = 2
+    box.Filled = false
+    box.Color = Color3.fromRGB(199,255,255)
+    box.Visible = true
+
+    local text = Drawing.new("Text")
+    text.Text = plr.Name
+    text.Center = true
+    text.Outline = true
+    text.Size = 16
+    text.Color = Color3.fromRGB(199,255,255)
+    text.Visible = true
+
+    ESPObjects[plr] = {box=box,text=text,plr=plr}
 end
-frame.InputBegan:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.MouseButton1 then
-        drag=true dragStart=input.Position startPos=frame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState==Enum.UserInputState.End then drag=false end
+
+local function removeESP(plr)
+    if ESPObjects[plr] then
+        pcall(function()
+            ESPObjects[plr].box:Remove()
+            ESPObjects[plr].text:Remove()
         end)
+        ESPObjects[plr] = nil
     end
-end)
-frame.InputChanged:Connect(function(input)
-    if input.UserInputType==Enum.UserInputType.MouseMovement then dragInput=input end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if input==dragInput and drag then update(input) end
-end)
-
--- Alt key toggle
-UserInputService.InputBegan:Connect(function(input,gp)
-    if input.KeyCode==Enum.KeyCode.LeftAlt then
-        frame.Visible=not frame.Visible
-    end
-end)
-
--- ===== RESPAWN HANDLING =====
-local function onCharacterAdded(char)
-    local hum=char:FindFirstChildWhichIsA("Humanoid") or char:WaitForChild("Humanoid")
-    local diedConn
-    diedConn=hum.Died:Connect(function()
-        stopModifier()
-        for plr,_ in pairs(PlayerESP) do removePlayerESP(plr) end
-        for inst,_ in pairs(ToolESP) do removeToolESP(inst) end
-        if diedConn then diedConn:Disconnect() diedConn=nil end
-    end)
-    task.delay(0.5,function()
-        if ModifierEnabled then startModifier() end
-        if ESPEnabled then RunService.RenderStepped:Connect(updateESP) end
-    end)
 end
 
-if LocalPlayer.Character then onCharacterAdded(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(onCharacterAdded)
+RunService.RenderStepped:Connect(function()
+    if not ESPEnabled then return end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            createESP(plr)
+            local hrp = plr.Character.HumanoidRootPart
+            local top = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0,2,0))
+            local bottom = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0,1,0))
+            local width = math.abs(top.X-bottom.X)
+            local height = math.abs(top.Y-bottom.Y)
+            local esp = ESPObjects[plr]
+            esp.box.Size = Vector2.new(width,height)
+            esp.box.Position = Vector2.new(top.X-width/2,top.Y)
+            esp.text.Position = Vector2.new(top.X,top.Y-20)
+        else
+            removeESP(plr)
+        end
+    end
+end)
+local AimlockEnabled = true
+local mouse = LocalPlayer:GetMouse()
 
--- ===== Aimlock Trigger =====
-UserInputService.InputBegan:Connect(function(input,gp)
+local function getClosestHead()
+    local closestDist = math.huge
+    local targetHRP = nil
+    local mousePos = UserInputService:GetMouseLocation()
+
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health>0 then
+            local head = plr.Character.Head
+            local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X,screenPos.Y)-mousePos).Magnitude
+                if dist < closestDist then
+                    closestDist = dist
+                    targetHRP = head
+                end
+            end
+        end
+    end
+    return targetHRP
+end
+
+-- Example: set camera/aim for shooting
+UserInputService.InputBegan:Connect(function(input, gp)
     if input.UserInputType==Enum.UserInputType.MouseButton2 and AimlockEnabled then
-        local head=getClosestHead()
-        if head then
-            -- Set weapon aim/projectile to head.Position here
-            -- You can integrate this into your weapon firing logic
+        local target = getClosestHead()
+        if target then
+            -- Move camera or set your projectile to target.Position
+            -- Depends on weapon logic in your game
         end
     end
 end)
